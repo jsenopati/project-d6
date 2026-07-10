@@ -50,8 +50,8 @@
 <div class="dice-wrapper group cursor-pointer select-none" class:rolling {onclick}>
 	<div class="dice-face">
 		<!-- 3x3 grid for pip placement -->
-		{#each Array(3) as _, row}
-			{#each Array(3) as _, col}
+		{#each Array(3), row (row)}
+			{#each Array(3), col (col)}
 				<div class="flex items-center justify-center">
 					{#if pips.some(([r, c]) => r === row && c === col)}
 						<div class="pip"></div>
