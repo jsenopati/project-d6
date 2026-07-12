@@ -2,10 +2,12 @@
 	type Props = {
 		value: number | null;
 		rolling?: boolean;
+		selected?: boolean;
+		disabled?: boolean;
 		onclick?: () => void;
 	};
 
-	let { value, rolling = false, onclick }: Props = $props();
+	let { value, rolling = false, selected = false, disabled = false, onclick }: Props = $props();
 
 	// Pip positions for each face (row, col on a 3x3 grid)
 	const pipLayouts: Record<number, [number, number][]> = {
@@ -47,7 +49,14 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="dice-wrapper group cursor-pointer select-none" class:rolling {onclick}>
+<div
+	class="dice-wrapper group select-none"
+	class:rolling
+	class:selected
+	class:disabled
+	class:cursor-pointer={!disabled}
+	onclick={disabled ? undefined : onclick}
+>
 	<div class="dice-face">
 		<!-- 3x3 grid for pip placement -->
 		{#each Array(3), row (row)}
@@ -89,6 +98,18 @@
 
 	.dice-wrapper:not(.rolling):active .dice-face {
 		transform: scale(0.97);
+	}
+
+	.selected .dice-face {
+		outline: 3px solid #4ade80;
+		outline-offset: 3px;
+		box-shadow:
+			0 0 0 3px rgba(74, 222, 128, 0.3),
+			4px 4px 12px rgba(0, 0, 0, 0.4);
+	}
+
+	.disabled .dice-face {
+		opacity: 0.5;
 	}
 
 	.pip {
