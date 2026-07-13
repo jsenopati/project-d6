@@ -140,3 +140,109 @@ export function bestScore(values: number[]): number {
 export function isFarkle(values: number[]): boolean {
 	return bestScore(values) === 0;
 }
+
+export type ComboType =
+	| 'single'
+	| 'three-of-a-kind'
+	| 'four-of-a-kind'
+	| 'five-of-a-kind'
+	| 'six-of-a-kind'
+	| 'straight'
+	| 'three-pairs'
+	| 'two-triplets';
+
+export interface ScoreCombo {
+	type: ComboType;
+	/** Human-readable description, e.g. "Three 3s" or "Single 1". */
+	label: string;
+	points: number;
+	/** Indices into the input `values` array that this combo consumes. */
+	indices: number[];
+}
+
+/** Indices in `values` for each face (1–6). */
+function faceIndices(values: number[]): number[][] {
+	const byFace: number[][] = [[], [], [], [], [], [], []]; // index 0 unused
+	values.forEach((v, i) => byFace[v].push(i));
+	return byFace;
+}
+
+/**
+ * Every scoring combo available in `values`, each tagged with the exact dice
+ * it consumes. Combos overlap on purpose (e.g. "Three 1s" and three separate
+ * "Single 1"s are all listed) so the player can choose which to set aside.
+ */
+export function scoreCombos(values: number[]): ScoreCombo[] {
+	const combos: ScoreCombo[] = [];
+	const byFace = faceIndices(values);
+
+	// Whole-set combos (all six dice).
+	if (values.length === 6) {
+		const allIndices = values.map((_, i) => i);
+		const distinct = byFace.filter((idx) => idx.length > 0).length;
+		if (distinct === 6) {
+			combos.push({ type: 'straight', label: 'Straight', points: 1500, indices: allIndices });
+		}
+		const pairs = byFace.filter((idx) => idx.length === 2).length;
+		if (pairs === 3) {
+			combos.push({ type: 'three-pairs', label: 'Three pairs', points: 1500, indices: allIndices });
+		}
+		const triplets = byFace.filter((idx) => idx.length === 3).length;
+		if (triplets === 2) {
+			combos.push({
+				type: 'two-triplets',
+				label: 'Two triplets',
+				points: 2500,
+				indices: allIndices
+			});
+		}
+	}
+
+	// Per-face n-of-a-kind combos.
+	for (let face = 1; face <= 6; face++) {
+		const idx = byFace[face];
+		if (idx.length >= 3) {
+			combos.push({
+				type: 'three-of-a-kind',
+				label: `Three ${face}s`,
+				points: face === 1 ? 1000 : face * 100,
+				indices: idx.slice(0, 3)
+			});
+		}
+		if (idx.length >= 4) {
+			combos.push({
+				type: 'four-of-a-kind',
+				label: `Four ${face}s`,
+				points: 1000,
+				indices: idx.slice(0, 4)
+			});
+		}
+		if (idx.length >= 5) {
+			combos.push({
+				type: 'five-of-a-kind',
+				label: `Five ${face}s`,
+				points: 2000,
+				indices: idx.slice(0, 5)
+			});
+		}
+		if (idx.length >= 6) {
+			combos.push({
+				type: 'six-of-a-kind',
+				label: `Six ${face}s`,
+				points: 3000,
+				indices: idx.slice(0, 6)
+			});
+		}
+	}
+
+	// Individual singles (each 1 and each 5).
+	for (const i of byFace[1]) {
+		combos.push({ type: 'single', label: 'Single 1', points: 100, indices: [i] });
+	}
+	for (const i of byFace[5]) {
+		combos.push({ type: 'single', label: 'Single 5', points: 50, indices: [i] });
+	}
+
+	return combos;
+}
+
