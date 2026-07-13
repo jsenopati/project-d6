@@ -1,5 +1,7 @@
 <script lang="ts">
 	import Dice from '$lib/components/Dice.svelte';
+	import { fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import {
 		startTurn,
 		rollTurn,
@@ -16,6 +18,9 @@
 	let playerTotal = $state(0);
 	let rolling = $state(false);
 	let message = $state('Click “Roll” to start your turn.');
+
+	// Bumped each roll so the fly-in transition replays for the new dice.
+	let rollId = $state(0);
 
 	// Indices of the current roll the player has tentatively selected.
 	let selected = $state<number[]>([]);
@@ -39,8 +44,12 @@
 		if (rolling || won || hasDiceOnTable) return;
 		rolling = true;
 		selected = [];
-		await new Promise((r) => setTimeout(r, 600));
+		// Resolve the roll immediately so the dice tumble out to their real values.
 		turn = rollTurn(turn);
+		rollId += 1;
+		// Cup pour + staggered fly-out for each die.
+		const settleMs = 500 + turn.roll.length * 100 + 150;
+		await new Promise((r) => setTimeout(r, settleMs));
 		rolling = false;
 		if (turn.farkled) {
 			message = '💥 Farkle! No scoring dice — turn score lost.';
@@ -115,26 +124,32 @@
 		</div>
 	</div>
 
-	<!-- Dice on the table -->
-	<div class="mb-6 flex min-h-40 flex-wrap items-center justify-center gap-4">
-		{#if rolling}
-			{#each Array(turn.diceToRoll), i (i)}
-				<Dice value={null} rolling disabled />
-			{/each}
-		{:else if hasDiceOnTable}
-			{#each turn.roll as value, i (i)}
-				<Dice
-					{value}
-					selected={selected.includes(i)}
-					disabled={turn.farkled}
-					onclick={() => toggle(i)}
-				/>
-			{/each}
-		{:else}
-			<p class="text-gray-500">
-				{turn.diceToRoll} dice ready to roll
-			</p>
-		{/if}
+	<!-- Roll stage: cup pours the dice out -->
+	<div class="roll-stage mb-6">
+		<div class="cup" class:pouring={rolling} aria-hidden="true">
+			<div class="cup-mouth"></div>
+			<div class="cup-body"></div>
+		</div>
+
+		<div class="flex min-h-40 flex-wrap items-center justify-center gap-4">
+			{#if hasDiceOnTable}
+				{#key rollId}
+					{#each turn.roll as value, i (i)}
+						<div in:fly={{ y: -160, duration: 500, delay: i * 100, easing: cubicOut }}>
+							<Dice
+								{value}
+								{rolling}
+								selected={selected.includes(i)}
+								disabled={rolling || turn.farkled}
+								onclick={() => toggle(i)}
+							/>
+						</div>
+					{/each}
+				{/key}
+			{:else}
+				<p class="text-gray-500">{turn.diceToRoll} dice in the cup — click “Roll”.</p>
+			{/if}
+		</div>
 	</div>
 
 	<!-- Selection preview -->
@@ -196,3 +211,57 @@
 		{/if}
 	</div>
 </div>
+
+<style>
+	.roll-stage {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+	}
+
+	.cup {
+		position: relative;
+		width: 96px;
+		height: 78px;
+		margin-bottom: 4px;
+		transform-origin: bottom center;
+	}
+
+	.cup-body {
+		position: absolute;
+		inset: 14px 0 0 0;
+		background: linear-gradient(135deg, #a78bfa, #6d28d9);
+		clip-path: polygon(14% 0, 86% 0, 72% 100%, 28% 100%);
+		box-shadow: inset -8px 0 12px rgba(0, 0, 0, 0.3);
+	}
+
+	.cup-mouth {
+		position: absolute;
+		top: 4px;
+		left: 8%;
+		right: 8%;
+		height: 20px;
+		background: radial-gradient(ellipse at center, #4c1d95, #2e1065);
+		border: 2px solid #7c3aed;
+		border-radius: 50%;
+	}
+
+	.cup.pouring {
+		animation: pour 0.5s ease;
+	}
+
+	@keyframes pour {
+		0% {
+			transform: rotate(0deg) translateY(0);
+		}
+		25% {
+			transform: rotate(-8deg) translateY(-4px);
+		}
+		60% {
+			transform: rotate(-46deg) translateX(-12px);
+		}
+		100% {
+			transform: rotate(0deg) translateY(0);
+		}
+	}
+</style>
