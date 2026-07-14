@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Dice from '$lib/components/Dice.svelte';
 	import { fly } from 'svelte/transition';
+	import { flip } from 'svelte/animate';
 	import { cubicOut } from 'svelte/easing';
 	import {
 		startTurn,
@@ -10,6 +11,7 @@
 		bankableScore,
 		hasWon,
 		scoreSelection,
+		scoreCombos,
 		FARKLE_CONFIG,
 		type FarkleTurn
 	} from '$lib/game';
@@ -19,8 +21,10 @@
 	let rolling = $state(false);
 	let message = $state('Click “Roll” to start your turn.');
 
-	// Bumped each roll so the fly-in transition replays for the new dice.
-	let rollId = $state(0);
+	// Display list of dice with stable ids so animate:flip can slide them around.
+	type Die = { id: number; value: number; rollIndex: number };
+	let dice = $state<Die[]>([]);
+	let nextDieId = 0;
 
 	// Indices of the current roll the player has tentatively selected.
 	let selected = $state<number[]>([]);
@@ -46,7 +50,7 @@
 		selected = [];
 		// Resolve the roll immediately so the dice tumble out to their real values.
 		turn = rollTurn(turn);
-		rollId += 1;
+		dice = turn.roll.map((value, rollIndex) => ({ id: nextDieId++, value, rollIndex }));
 		// Cup pour + staggered fly-out for each die.
 		const settleMs = 500 + turn.roll.length * 100 + 150;
 		await new Promise((r) => setTimeout(r, settleMs));
@@ -55,9 +59,22 @@
 			message = '💥 Farkle! No scoring dice — turn score lost.';
 		} else if (turn.hotDice) {
 			message = '🔥 Hot dice! All six are back in play.';
+			reorderScoringLeft();
 		} else {
 			message = 'Select the scoring dice to set aside.';
+			reorderScoringLeft();
 		}
+	}
+
+	// After the roll settles, slide the scoring dice to the left of the row.
+	function reorderScoringLeft() {
+		const scoring = new Set(scoreCombos(turn.roll).flatMap((c) => c.indices));
+		dice = [...dice].sort((a, b) => {
+			const aRank = scoring.has(a.rollIndex) ? 0 : 1;
+			const bRank = scoring.has(b.rollIndex) ? 0 : 1;
+			if (aRank !== bRank) return aRank - bRank;
+			return a.rollIndex - b.rollIndex;
+		});
 	}
 
 	function keepSelection() {
@@ -69,6 +86,7 @@
 		if (!result.valid) return;
 		turn = result.turn;
 		selected = [];
+		dice = [];
 		message = turn.hotDice
 			? '🔥 Hot dice! Roll all six again or bank.'
 			: `Set aside for ${result.points}. Roll again or bank.`;
@@ -84,12 +102,14 @@
 		}
 		turn = startTurn();
 		selected = [];
+		dice = [];
 	}
 
 	function endTurn() {
 		// After a Farkle the unbanked score is already 0; just start fresh.
 		turn = startTurn();
 		selected = [];
+		dice = [];
 		message = 'New turn — click “Roll”.';
 	}
 
@@ -97,6 +117,7 @@
 		playerTotal = 0;
 		turn = startTurn();
 		selected = [];
+		dice = [];
 		rolling = false;
 		message = 'Click “Roll” to start your turn.';
 	}
@@ -132,20 +153,21 @@
 		</div>
 
 		<div class="flex min-h-40 flex-wrap items-center justify-center gap-4">
-			{#if hasDiceOnTable}
-				{#key rollId}
-					{#each turn.roll as value, i (i)}
-						<div in:fly={{ y: -160, duration: 500, delay: i * 100, easing: cubicOut }}>
-							<Dice
-								{value}
-								{rolling}
-								selected={selected.includes(i)}
-								disabled={rolling || turn.farkled}
-								onclick={() => toggle(i)}
-							/>
-						</div>
-					{/each}
-				{/key}
+			{#if dice.length > 0}
+				{#each dice as die, i (die.id)}
+					<div
+						in:fly={{ y: -160, duration: 500, delay: i * 100, easing: cubicOut }}
+						animate:flip={{ duration: 400, easing: cubicOut }}
+					>
+						<Dice
+							value={die.value}
+							{rolling}
+							selected={selected.includes(die.rollIndex)}
+							disabled={rolling || turn.farkled}
+							onclick={() => toggle(die.rollIndex)}
+						/>
+					</div>
+				{/each}
 			{:else}
 				<p class="text-gray-500">{turn.diceToRoll} dice in the cup — click “Roll”.</p>
 			{/if}
